@@ -1,0 +1,76 @@
+id: insights_flow
+namespace: data_pipeline
+description: Build analytical insight tables from staged Wikimedia events.
+
+triggers:
+  - id: every_5_minutes
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "*/5 * * * *"
+
+tasks:
+  - id: log_start
+    type: io.kestra.plugin.core.log.Log
+    message: Starting Wikimedia insights stage.
+
+  - id: build_insights
+    type: io.kestra.plugin.core.flow.Parallel
+    tasks:
+      - id: top_pages
+        type: io.kestra.plugin.jdbc.postgresql.Queries
+        description: Refresh top pages per hour insight.
+        url: "jdbc:postgresql://{{ envs.postgres_host }}:{{ envs.postgres_port }}/{{ envs.postgres_db }}"
+        username: "{{ envs.postgres_user }}"
+        password: "{{ envs.postgres_password }}"
+        sql: "{{ read('file:///app/sql/top_pages.sql') }}"
+        fetchType: NONE
+        retry:
+          type: constant
+          maxAttempts: 3
+          interval: PT30S
+          warningOnRetry: true
+
+      - id: bot_ratio
+        type: io.kestra.plugin.jdbc.postgresql.Queries
+        description: Refresh bot versus human ratio insight.
+        url: "jdbc:postgresql://{{ envs.postgres_host }}:{{ envs.postgres_port }}/{{ envs.postgres_db }}"
+        username: "{{ envs.postgres_user }}"
+        password: "{{ envs.postgres_password }}"
+        sql: "{{ read('file:///app/sql/bot_ratio.sql') }}"
+        fetchType: NONE
+        retry:
+          type: constant
+          maxAttempts: 3
+          interval: PT30S
+          warningOnRetry: true
+
+      - id: edit_wars
+        type: io.kestra.plugin.jdbc.postgresql.Queries
+        description: Refresh edit-war detection insight.
+        url: "jdbc:postgresql://{{ envs.postgres_host }}:{{ envs.postgres_port }}/{{ envs.postgres_db }}"
+        username: "{{ envs.postgres_user }}"
+        password: "{{ envs.postgres_password }}"
+        sql: "{{ read('file:///app/sql/edit_wars.sql') }}"
+        fetchType: NONE
+        retry:
+          type: constant
+          maxAttempts: 3
+          interval: PT30S
+          warningOnRetry: true
+
+      - id: edit_size_by_namespace
+        type: io.kestra.plugin.jdbc.postgresql.Queries
+        description: Refresh edit size by namespace insight.
+        url: "jdbc:postgresql://{{ envs.postgres_host }}:{{ envs.postgres_port }}/{{ envs.postgres_db }}"
+        username: "{{ envs.postgres_user }}"
+        password: "{{ envs.postgres_password }}"
+        sql: "{{ read('file:///app/sql/size_namespace.sql') }}"
+        fetchType: NONE
+        retry:
+          type: constant
+          maxAttempts: 3
+          interval: PT30S
+          warningOnRetry: true
+
+  - id: log_complete
+    type: io.kestra.plugin.core.log.Log
+    message: Wikimedia insights stage completed.

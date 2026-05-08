@@ -1,0 +1,92 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - pipeline
+
+  kestra:
+    image: kestra/kestra:latest
+    user: "root"
+    command: server standalone
+    environment:
+      ENV_POSTGRES_HOST: ${POSTGRES_HOST}
+      ENV_POSTGRES_PORT: ${POSTGRES_PORT}
+      ENV_POSTGRES_DB: ${POSTGRES_DB}
+      ENV_POSTGRES_SCHEMA: ${POSTGRES_SCHEMA}
+      ENV_POSTGRES_USER: ${POSTGRES_USER}
+      ENV_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      ENV_BATCH_SIZE: ${BATCH_SIZE}
+      ENV_RECONNECT_SECONDS: ${RECONNECT_SECONDS}
+      KESTRA_CONFIGURATION: |
+        micronaut:
+          io:
+            watch:
+              enabled: true
+              paths:
+                - /app/flows
+
+        datasources:
+          postgres:
+            url: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+            driver-class-name: org.postgresql.Driver
+            username: ${POSTGRES_USER}
+            password: ${POSTGRES_PASSWORD}
+
+        kestra:
+          variables:
+            env-vars-prefix: "ENV_"
+          local-files:
+            allowed-paths:
+              - /app/scripts
+              - /app/sql
+          repository:
+            type: postgres
+          storage:
+            type: local
+            local:
+              base-path: /app/storage
+          queue:
+            type: postgres
+          tasks:
+            tmp-dir:
+              path: /tmp/kestra-wd/tmp
+          plugins:
+            configurations:
+              - type: io.kestra.plugin.scripts.runner.docker.Docker
+                values:
+                  volumeEnabled: true
+          url: http://localhost:8080/
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./flows:/app/flows
+      - ./scripts:/app/scripts:ro
+      - ./sql:/app/sql:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/kestra-wd:/tmp/kestra-wd
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pipeline
+
+volumes:
+  postgres_data:
+
+networks:
+  pipeline:
+    name: data-pipeline-network

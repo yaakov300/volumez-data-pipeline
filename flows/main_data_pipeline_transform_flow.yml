@@ -1,0 +1,30 @@
+id: transform_flow
+namespace: data_pipeline
+description: Transform raw Wikimedia events into an analysis-ready staging table.
+
+triggers:
+  - id: every_5_minutes
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "*/5 * * * *"
+
+tasks:
+  - id: log_start
+    type: io.kestra.plugin.core.log.Log
+    message: Starting Wikimedia transform stage.
+
+  - id: transform_events
+    type: io.kestra.plugin.jdbc.postgresql.Queries
+    url: "jdbc:postgresql://{{ envs.postgres_host }}:{{ envs.postgres_port }}/{{ envs.postgres_db }}"
+    username: "{{ envs.postgres_user }}"
+    password: "{{ envs.postgres_password }}"
+    sql: "{{ read('file:///app/sql/transform.sql') }}"
+    fetchType: NONE
+    retry:
+      type: constant
+      maxAttempts: 3
+      interval: PT30S
+      warningOnRetry: true
+
+  - id: log_complete
+    type: io.kestra.plugin.core.log.Log
+    message: Wikimedia transform stage completed.

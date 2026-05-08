@@ -1,0 +1,35 @@
+id: ingest_flow
+namespace: data_pipeline
+description: Ingest raw Wikimedia recentchange events into PostgreSQL.
+
+tasks:
+  - id: log_start
+    type: io.kestra.plugin.core.log.Log
+    message: Starting Wikimedia EventStreams ingest consumer.
+
+  - id: consume_stream
+    type: io.kestra.plugin.docker.Run
+    containerImage: python:3.11-slim
+    pullPolicy: IF_NOT_PRESENT
+    networkMode: data-pipeline-network
+    inputFiles:
+      consume_stream.py: file:///app/scripts/consume_stream.py
+    entryPoint:
+      - /bin/sh
+      - -c
+    env:
+      POSTGRES_HOST: "{{ envs.postgres_host }}"
+      POSTGRES_PORT: "{{ envs.postgres_port }}"
+      POSTGRES_DB: "{{ envs.postgres_db }}"
+      POSTGRES_SCHEMA: "{{ envs.postgres_schema }}"
+      POSTGRES_USER: "{{ envs.postgres_user }}"
+      POSTGRES_PASSWORD: "{{ envs.postgres_password }}"
+      BATCH_SIZE: "{{ envs.batch_size }}"
+      RECONNECT_SECONDS: "{{ envs.reconnect_seconds }}"
+    commands:
+      - pip install --no-cache-dir requests sseclient-py psycopg2-binary && python consume_stream.py
+    retry:
+      type: constant
+      maxAttempts: 5
+      interval: PT30S
+      warningOnRetry: true
